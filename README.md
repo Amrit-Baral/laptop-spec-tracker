@@ -1,9 +1,9 @@
-# 💻 Smartprix Laptop Scraper
+# 💻 Realtime Laptop Spec Tracker 🚀
 
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-A robust and customizable web scraper that extracts laptop listings from [Smartprix](https://www.smartprix.com/laptops) using Selenium, with structured spec parsing and CSV export.
+A cross-platform laptop specification tracker and validator that scrapes multiple sources, merges them into a unified format, and prepares for filtering, benchmarking, and spec-based analytics.
 
 ---
 
