@@ -1,4 +1,5 @@
 import time
+import re
 import pandas as pd
 import unicodedata
 from selenium import webdriver
@@ -8,10 +9,16 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, ElementClickInterceptedException
 
+# -------------------------------
+# 💻 CONFIGURATION
+# -------------------------------
 URL = "https://www.smartprix.com/laptops"
 timestamp = time.strftime("%Y%m%d-%H%M%S")
 OUTPUT_CSV = f"data/smartprix_laptops_{timestamp}.csv"
 
+# -------------------------------
+# 🚀 BROWSER SETUP
+# -------------------------------
 def get_driver():
     options = Options()
     options.add_argument("--disable-blink-features=AutomationControlled")
@@ -21,6 +28,9 @@ def get_driver():
     driver.set_window_size(1200, 800)
     return driver
 
+# -------------------------------
+# 🧪 INITIAL PAGE CHECK
+# -------------------------------
 def wait_for_first_page(driver):
     try:
         WebDriverWait(driver, 60).until(
@@ -31,6 +41,9 @@ def wait_for_first_page(driver):
         print("❌ Timeout: First product cards did not load.")
         return False
 
+# -------------------------------
+# 🔓 CAPTCHA WORKAROUND
+# -------------------------------
 def manual_captcha_workaround(driver):
     print("⚠️ CAPTCHA likely not triggered yet.")
     print("👉 Opening first laptop in new tab. Solve CAPTCHA if prompted.")
@@ -45,7 +58,10 @@ def manual_captcha_workaround(driver):
         driver.switch_to.window(original_window)
     except Exception as e:
         print(f"⚠️ Could not trigger CAPTCHA workaround: {e}")
-
+        
+# -------------------------------
+# 🔁 SCROLLING & MANUAL STOP LOGIC
+# -------------------------------
 def load_all_products(driver, max_clicks=200, max_stale_attempts=5, max_runtime_sec=3600):
     print("🔁 Clicking 'Load More' until all laptops are loaded or timeout is reached...")
     previous_count = 0
@@ -53,9 +69,8 @@ def load_all_products(driver, max_clicks=200, max_stale_attempts=5, max_runtime_
     start_time = time.time()
 
     for i in range(max_clicks):
-        elapsed = time.time() - start_time
-        if elapsed > max_runtime_sec:
-            print(f"⏳ Runtime exceeded {max_runtime_sec//60} minutes. Stopping.")
+        if time.time() - start_time > max_runtime_sec:
+            print(f"⏳ Runtime exceeded {max_runtime_sec // 60} minutes. Stopping.")
             break
 
         product_cards = driver.find_elements(By.CSS_SELECTOR, "div.sm-product")
@@ -66,7 +81,6 @@ def load_all_products(driver, max_clicks=200, max_stale_attempts=5, max_runtime_
             print(f"⚠️ No new laptops after click #{i+1}. Attempt {stale_attempts}/{max_stale_attempts}.")
             if stale_attempts >= max_stale_attempts:
                 print("🚫 Max no-change attempts reached. Saving snapshot before exit.")
-                timestamp = time.strftime("%Y%m%d-%H%M%S")
                 driver.save_screenshot(f"data/loadmore_fail_{timestamp}.png")
                 break
         else:
@@ -92,22 +106,21 @@ def load_all_products(driver, max_clicks=200, max_stale_attempts=5, max_runtime_
 
         except TimeoutException:
             print("❌ Timeout waiting after click. Saving snapshot.")
-            timestamp = time.strftime("%Y%m%d-%H%M%S")
             driver.save_screenshot(f"data/loadmore_timeout_{timestamp}.png")
             break
         except (NoSuchElementException, ElementClickInterceptedException):
             print("⚠️ 'Load More' not clickable or missing. Scrolling up slightly...")
             driver.execute_script("window.scrollBy(0, -100);")
             time.sleep(2)
-        # Ask user if they want to stop loading more
+
         user_input = input("🔄 Press [Enter] to load more or type 'stop' to end and start scraping: ")
         if user_input.strip().lower() == 'stop':
             print("🛑 Manual stop triggered. Proceeding to scrape loaded laptops...\n")
             break
 
-# 👇 Paste this ABOVE extract_laptops()
-import re
-
+# -------------------------------
+# 🧠 SPEC PARSER
+# -------------------------------
 def parse_specs(specs):
     parsed = {
         "Processor": None,
@@ -125,7 +138,7 @@ def parse_specs(specs):
     if not specs or specs == "N/A":
         return parsed
 
-    if match := re.search(r"(Intel|AMD|Apple|M1|M2|M3|M4)[^/|,]+", specs, re.IGNORECASE):
+    if match := re.search(r"(Intel|AMD|Apple|M\d)[^/|,]+", specs, re.IGNORECASE):
         parsed["Processor"] = match.group().strip()
 
     if match := re.search(r"(\d+)\s?GB\s?(?:DDR\d|LPDDR\d)?\s?RAM", specs, re.IGNORECASE):
@@ -151,10 +164,10 @@ def parse_specs(specs):
     elif "eMMC" in specs:
         parsed["Storage Type"] = "eMMC"
 
-    if match := re.search(r"(RTX\s?\d{3,4}|GTX\s?\d{3,4}|Intel Iris Xe|Radeon\s?\w+|Graphics\s\d+)", specs, re.IGNORECASE):
+    if match := re.search(r"(RTX\s?\d{3,4}|GTX\s?\d{3,4}|Intel Iris Xe|Radeon\s?\w+)", specs, re.IGNORECASE):
         parsed["GPU"] = match.group().strip()
 
-    if match := re.search(r"(\d+)\s?GB\s?(VRAM|Graphics|Graph|RTX|GTX)", specs, re.IGNORECASE):
+    if match := re.search(r"(\d+)\s?GB\s?(VRAM|Graphics|RTX|GTX)", specs, re.IGNORECASE):
         parsed["VRAM (GB)"] = int(match.group(1))
 
     if match := re.search(r"(Windows\s?\d+|Win11|Win10|Mac\s?OS|MacOS|DOS|Linux|Ubuntu)", specs, re.IGNORECASE):
@@ -165,6 +178,9 @@ def parse_specs(specs):
 
     return parsed
 
+# -------------------------------
+# 📦 DATA EXTRACTION
+# -------------------------------
 def extract_laptops(driver):
     print("🔍 Extracting laptop details...")
     laptops = []
@@ -175,26 +191,26 @@ def extract_laptops(driver):
             name = card.find_element(By.CSS_SELECTOR, "a.name").text.strip()
         except:
             name = "N/A"
+
         try:
             specs_raw = card.find_element(By.CSS_SELECTOR, ".specs").text.strip()
             specs = unicodedata.normalize("NFKC", specs_raw).replace("\u2009", " ")
         except:
             specs = "N/A"
+
         try:
             price = card.find_element(By.CSS_SELECTOR, ".price").text.strip()
         except:
             price = "N/A"
 
-        details = parse_specs(specs)
+        parsed = parse_specs(specs)
 
-        laptop = {
+        laptops.append({
             "Name": name,
             "Specs": specs,
             "Price": price,
-            **details
-        }
-
-        laptops.append(laptop)
+            **parsed
+        })
 
     return laptops
 
@@ -208,20 +224,8 @@ def main():
         return
 
     manual_captcha_workaround(driver)
-
-    laptops = []
-
-    try:
-        load_all_products(driver)
-    except KeyboardInterrupt:
-        print("\n🛑 Manual interrupt during loading. Proceeding with what’s visible...")
-
-    try:
-        laptops = extract_laptops(driver)
-    except Exception as e:
-        print(f"\n⚠️ Could not extract laptops after interruption: {e}")
-        laptops = []
-
+    load_all_products(driver)
+    laptops = extract_laptops(driver)
     driver.quit()
 
     if laptops:
