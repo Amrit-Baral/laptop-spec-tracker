@@ -1,5 +1,8 @@
 # 💻 Smartprix Laptop Scraper
 
+![Python](https://img.shields.io/badge/python-3.11-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 A robust and customizable web scraper that extracts laptop listings from [Smartprix](https://www.smartprix.com/laptops) using Selenium, with structured spec parsing and CSV export.
 
 ---
